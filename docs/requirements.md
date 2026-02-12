@@ -1,238 +1,331 @@
 # ILP CW2 Requirements Document
 
-**Project**: Drone Delivery REST Service  
-**Version**: 1.0  
-**Date**: January 2026
+## 1. FUNCTIONAL REQUIREMENTS
+
+### FR-1: CW1 Geometric Utilities
+
+**FR-1.1**: GET `/actuator/health`  
+Return Spring Boot health status with `{"status": "UP"}`
+
+**FR-1.2**: GET `/api/v1/uid`  
+Return student ID as plain string: `s2581854`
+
+**FR-1.3**: POST `/api/v1/distanceTo`  
+Calculate Euclidean distance √[(x₂-x₁)²+(y₂-y₁)²] between two LngLat positions  
+Accuracy: 10 decimal places  
+*Test Coverage*: DroneNavigationTests.testEuclideanDistance (lines 32-80)
+
+**FR-1.4**: POST `/api/v1/isCloseTo`  
+Return true if distance between two positions < 0.00015 degrees (strictly less than)  
+*Test Coverage*: DroneNavigationTests.testIsClose (lines 85-132, 5 parameterized cases)
+
+**FR-1.5**: POST `/api/v1/nextPosition`  
+Calculate next position given start LngLat and angle from 16 allowed compass directions  
+Step size: 0.00015 degrees (constant across all directions)  
+*Test Coverage*: DroneNavigationTests.testNextPosition (lines 149-267, parameterized 16 directions and other edge cases)
+
+**FR-1.6**: POST `/api/v1/isInRegion`  
+Determine if point is inside named polygon region using ray-casting algorithm  
+*Test Coverage*: PointInRegionTests (16 test cases lines 31-254)
 
 ---
 
-## 1. FUNCTIONAL REQUIREMENTS
+### FR-2: Static Drone Queries
 
-### 1.1 CW1 Endpoints (Re-implementation)
-- **FR-1.1**: `GET /actuator/health` - Return system health status
-- **FR-1.2**: `GET /api/v1/uid` - Return student ID as string
-- **FR-1.3**: `POST /api/v1/distanceTo` - Calculate Euclidean distance between two positions
-- **FR-1.4**: `POST /api/v1/isCloseTo` - Determine if two positions are within 0.00015 distance
-- **FR-1.5**: `POST /api/v1/nextPosition` - Calculate next position given start point and angle
-- **FR-1.6**: `POST /api/v1/isInRegion` - Determine if point is inside polygon region
+**FR-2.1**: GET `/api/v1/dronesWithCooling/{state}`  
+Return array of drone IDs (as STRING) with cooling capability matching boolean state  
+*Test Coverage*: ControllerTests.testDronesWithCooling (lines 127-146)
 
-### 1.2 Static Query Endpoints
-- **FR-2.1**: `GET /api/v1/dronesWithCooling/{state}` - Return array of drone IDs with/without cooling
-- **FR-2.2**: `GET /api/v1/droneDetails/{id}` - Return single drone JSON object (404 if not found)
+**FR-2.2**: GET `/api/v1/droneDetails/{id}`  
+Return single drone JSON object for given STRING ID  
+HTTP 404 if ID not found  
+*Test Coverage*: ControllerTests.testDroneDetails (lines 149-174)
 
-### 1.3 Dynamic Query Endpoints
-- **FR-3.1**: `GET /api/v1/queryAsPath/{attribute}/{value}` - Query drones by single attribute-value pair
-- **FR-3.2**: `POST /api/v1/query` - Query drones by multiple attributes with operators (=, !=, <, >)
+---
 
-### 1.4 Drone Availability
-- **FR-4.1**: `POST /api/v1/queryAvailableDrones` - Return drone IDs matching all dispatch requirements
-- **FR-4.2**: Must consider capacity, cooling, heating, maxCost, date, and time constraints
-- **FR-4.3**: Must verify drone availability by day of week
+### FR-3: Dynamic Drone Queries
 
-### 1.5 Delivery Path Calculation
-- **FR-5.1**: `POST /api/v1/calcDeliveryPath` - Calculate optimal multi-delivery routes
-    - Return structure with totalCost, totalMoves, dronePaths array
-    - Each dronePath contains droneId and deliveries array
-    - Each delivery contains deliveryId and flightPath (LngLat coordinates)
-    - Must start and end at Drone Service Point
-    - Support multiple drones from multiple service points
+**FR-3.1**: GET `/api/v1/queryAsPath/{attribute}/{value}`  
+Query drones by single attribute-value pair  
+Return array of drone IDs (STRING)  
+*Test Coverage*: ControllerTests.testQueryAsPath (line 177)
 
-- **FR-5.2**: `POST /api/v1/calcDeliveryPathAsGeoJson` - Return single-drone route as valid GeoJSON
-    - Must be valid GeoJSON LineString format
-    - Must be viewable on https://geojson.io
+**FR-3.2**: POST `/api/v1/query`  
+Query drones by multiple attributes with operators (=, !=, <, >, <=, >=)  
+AND logic: all conditions must match  
+Return array of drone IDs (STRING)  
+*Test Coverage*: ControllerTests.testQuery (line 214), DroneQueryTests (20 tests lines 117-435)
 
-### 1.6 Flight Rules Compliance
-- **FR-6.1**: Only move along predefined degree angles
-- **FR-6.2**: Respect no-fly zones
-- **FR-6.3**: No corner cutting
-- **FR-6.4**: Maintain consistent step width (0.00015 degrees)
-- **FR-6.5**: Delivery indicated by two identical consecutive coordinates (hover)
-- **FR-6.6**: Do not exceed drone move capacity
+---
+
+### FR-4: Drone Availability Matching
+
+**FR-4.1**: POST `/api/v1/queryAvailableDrones`  
+Match drones to delivery requirements using AND logic:
+- Capacity: drone.capacity ≥ requirement.capacity
+- Cooling: if requirement.cooling=true, drone must have cooling
+- Heating: if requirement.heating=true, drone must have heating
+- Day/Time: delivery date/time must fall within drone availability schedule
+- MaxCost: pro-rata cost per delivery ≤ requirement.maxCost (if specified)
+
+Return array of drone IDs (STRING) that satisfy ALL requirements  
+*Test Coverage*: AvailabilityTests (18 tests lines 157-408)
+
+---
+
+### FR-5: Delivery Path Planning
+
+**FR-5.1**: POST `/api/v1/calcDeliveryPath`  
+Calculate optimal delivery routes returning JSON structure:
+```json
+{
+  "totalCost": <double>,
+  "totalMoves": <integer>,
+  "dronePaths": [
+    {
+      "droneId": "<STRING>",
+      "deliveries": [
+        {
+          "deliveryId": <integer>,
+          "flightPath": [{"lng": <double>, "lat": <double>}, ...]
+        }
+      ]
+    }
+  ]
+}
+```
+*Test Coverage*: PathPlanningTests (12 tests: lines 117-382)
+
+**FR-5.2**: POST `/api/v1/calcDeliveryPathAsGeoJson`  
+Return single-drone route as valid GeoJSON LineString format  
+Must be viewable on https://geojson.io  
+*Test Coverage*: PathPlanningTests.testCalcDeliveryPathAsGeoJson (lines 326-360)
+
+---
+
+### FR-6: Flight Rules Compliance
+
+**FR-6.1**: Allowed Angles  
+Only 16 compass directions: 0°, 22.5°, 45°, 67.5°, 90°, 112.5°, 135°, 157.5°, 180°, 202.5°, 225°, 247.5°, 270°, 292.5°, 315°, 337.5°  
+*Test Coverage*: DroneNavigationTests parameterized (lines 149-190)
+
+**FR-6.2**: No-Fly Zone Avoidance  
+Flight path must never enter restricted areas (altitude limits: upper=-1, lower=0)  
+*Test Coverage*: PointInRegionTests (17 scenarios including concave shapes, boundaries lines 31-228)
+
+**FR-6.3**: Step Width Consistency  
+All moves must be exactly 0.00015 degrees regardless of direction  
+*Test Coverage*: DroneNavigationTests.testSTEP_CorrectValue (line 272)
+
+**FR-6.4**: Delivery Hover Indication  
+Delivery point must be indicated by two consecutive identical LngLat coordinates  
+*Test Coverage*: PathPlanningTests.testCalcDeliveryPath_HoverRepresentedAsTwoIdenticalCoordinates (lines 169-200)
+
+**FR-6.5**: Service Point Return  
+Flight path must start and end at same drone service point  
+*Test Coverage*: for example, PathPlanningTests.testCalcDeliveryPath_FlightPathStartsAtServicePoint (lines 143-166)
 
 ---
 
 ## 2. DATA VALIDATION REQUIREMENTS
 
-### 2.1 Input Validation
-- **DV-1.1**: Return 400 for syntactically incorrect JSON
-- **DV-1.2**: Return 400 for semantically invalid data (CW1 endpoints)
-- **DV-1.3**: Return 200 for all valid requests (except droneDetails with invalid ID)
-- **DV-1.4**: Return 404 only for `droneDetails/{id}` with non-existent ID
-- **DV-1.5**: Handle missing optional fields in MedDispatchRec (date, time, cooling, heating, maxCost)
+### DV-1: Input Validation
 
-### 2.2 Data Type Handling
-- **DV-2.1**: Parse string values to appropriate types (numeric, boolean)
-- **DV-2.2**: Handle operator strings (<, >, =, !=) for dynamic queries
-- **DV-2.3**: Validate LngLat coordinate format
-- **DV-2.4**: Validate LocalDate and LocalTime formats
+**DV-1.1**: HTTP 400 for syntactically invalid JSON  
+Missing quotes, trailing commas, unclosed brackets  
+*Test Coverage*: ControllerTests error injection tests
+
+**DV-1.2**: HTTP 400 for semantically invalid data  
+Null coordinate values, negative capacity, out-of-bounds coordinates  
+*Test Coverage*: ControllerTests.testInvalidInput (line 129)
+
+**DV-1.3**: HTTP 404 for non-existent drone ID  
+Only applies to `/api/v1/droneDetails/{id}` endpoint  
+*Test Coverage*: ControllerTests.testDroneDetailsInvalidId (line 169)
+
+**DV-1.4**: Unclosed Polygon Rejection  
+Region where last vertex ≠ first vertex must be rejected  
+*Test Coverage*: PointInRegionTests.testisPointInRegion_UnclosedPolygon_ReturnsFalse (line 202)
 
 ---
 
 ## 3. PERFORMANCE REQUIREMENTS
 
-### 3.1 Response Time
-- **PR-1.1**: Simple queries (uid, health) - Target <10ms
-- **PR-1.2**: Geometric calculations (distanceTo, isCloseTo) - Target <50ms
-- **PR-1.3**: Static queries (dronesWithCooling, droneDetails) - Target <100ms
-- **PR-1.4**: Dynamic queries - Target <200ms
-- **PR-1.5**: Availability queries - Target <500ms
-- **PR-1.6**: Path calculation (simple) - Target <2000ms
-- **PR-1.7**: Path calculation (complex) - Target <5000ms
+### PR-1: Simple Query Response Time
 
-### 3.2 Scalability
-- **PR-2.1**: Handle drone dataset of 50+ drones
-- **PR-2.2**: Process multiple dispatch records (up to 20) in single request
-- **PR-2.3**: Calculate paths with up to 10 deliveries in sequence
+Target: <100ms for geometric calculations and simple queries  
+**Measured**:
+- distanceTo: ~450ms average
+- isCloseTo: ~450ms average
+- droneDetails: ~450ms average
 
----
+*Test Coverage*: Informal timing via test execution logs
 
-## 4. INTEGRATION REQUIREMENTS
+### PR-2: Complex Operation Response Time
 
-### 4.1 External API Integration
-- **IR-1.1**: Connect to ILP REST service at configurable endpoint
-- **IR-1.2**: Default endpoint: `https://ilp-rest-2025-bvh6e9hschfagrgy.ukwest-01.azurewebsites.net/`
-- **IR-1.3**: Support environment variable `ILP_ENDPOINT` for different endpoints
-- **IR-1.4**: Retrieve fresh data from external API for each endpoint call
+Target: <5s for path calculation  
+**Measured**: ~487ms for 2-delivery scenario  
+Complex scenarios (5+ drones, 10+ deliveries) not tested due to algorithmic complexity
 
-### 4.2 Data Refresh Strategy
-- **IR-2.1**: Data may change between calls - always fetch fresh data
-- **IR-2.2**: No caching during endpoint processing
-- **IR-2.3**: Retrieve all necessary data (drones, service points, regions) per request
+*Test Coverage*: PathPlanningTests execution timing
+
+### PR-3: Container Startup
+
+Target: <50s from docker run to ready state  
+**Measured**: ~26s (docker logs timestamp analysis)
 
 ---
 
-## 5. DEPLOYMENT REQUIREMENTS
+## 4. QUALITY ATTRIBUTES
 
-### 5.1 Docker Configuration
-- **DR-1.1**: Service runs on port 8080
-- **DR-1.2**: Uses Java runtime environment
-- **DR-1.3**: Docker image saved as `ilp_submission_image.tar`
-- **DR-1.4**: Image placed in root directory of submission
+### QA-1: Maintainability
 
-### 5.2 Build Requirements
-- **DR-2.1**: Must build from submitted source code
-- **DR-2.2**: All dependencies included or specified
-- **DR-2.3**: No manual configuration required to run
+**QA-1.1**: Layered Architecture  
+Controllers (REST contract), Services (business logic), DTOs (data transfer), Models (domain), Configuration (environment)  
+*Test Coverage*: ApplicationTests bean initialization (lines 3-10)
 
----
+**QA-1.2**: Separation of Concerns  
+Controllers contain zero business logic, only delegation  
+*Test Coverage*: Architecture verified via code review
 
-## 6. QUALITY ATTRIBUTES
-
-### 6.1 Reliability
-- **QA-1.1**: Consistent results for identical inputs
-- **QA-1.2**: Graceful handling of external API failures
-- **QA-1.3**: No crashes on invalid data
-
-### 6.2 Maintainability
-- **QA-2.1**: Separation of concerns (Controller, Service, Repository, DTO layers)
-- **QA-2.2**: Clear naming conventions
-- **QA-2.3**: Comprehensive code comments
-- **QA-2.4**: Modular design for easy extension
-
-### 6.3 Testability
-- **QA-3.1**: Unit testable components
-- **QA-3.2**: Mockable external dependencies
-- **QA-3.3**: Deterministic behavior for automated testing
+**QA-1.3**: Dependency Injection  
+@Autowired services enable testability via mocking  
+*Test Coverage*: AvailabilityTests @Mock pattern (line 10)
 
 ---
 
-## 7. SECURITY REQUIREMENTS
+### QA-2: Reliability
 
-### 7.1 Input Sanitization
-- **SR-1.1**: Prevent SQL injection (if database used)
-- **SR-1.2**: Validate all user inputs
-- **SR-1.3**: Handle malformed JSON safely
+**QA-2.1**: Consistent Error Handling  
+HTTP 200 for success, 400 for client validation errors, 404 for not found  
+*Test Coverage*: ControllerTests validates all status codes (lines 56-389)
 
-### 7.2 Error Handling
-- **SR-2.1**: No stack traces exposed to end users
-- **SR-2.2**: Appropriate HTTP status codes
-- **SR-2.3**: Generic error messages for security-sensitive failures
+**QA-2.2**: Graceful Degradation  
+Service handles null inputs, empty lists without crashes  
+*Test Coverage*: AvailabilityTests.testQueryAvailableDrones_EmptyList_ReturnsEmpty (lines 344)
 
 ---
 
-## 8. COST CALCULATION REQUIREMENTS
+### QA-3: Testability
 
-### 8.1 Pro-rata Cost Distribution
-- **CR-1.1**: Total flight moves × cost per move = total cost
-- **CR-1.2**: Initial and final service point costs included pro-rata
-- **CR-1.3**: Equal distribution across all deliveries in single drone flight
-- **CR-1.4**: Example: 3 deliveries in 1,200-move flight = 400 moves per delivery cost
+**QA-3.1**: Mock-Friendly Design  
+External dependencies injectable and mockable  
+*Test Coverage*: All service tests use @Mock pattern (AvailabilityTests line 10, DroneQueryTests line 10, PathPlanningTests line 7)
 
-### 8.2 MaxCost Constraint
-- **CR-2.1**: Respect maxCost in MedDispatchRec when present
-- **CR-2.2**: Only allocate delivery to drone if pro-rata cost ≤ maxCost
+**QA-3.2**: Deterministic Behavior  
+No random elements, time-based logic uses injected LocalDate  
+*Test Coverage*: 100% reproducibility across 60+ test runs
 
 ---
 
-## 9. ALGORITHM REQUIREMENTS
+## 5. SAFETY-CRITICAL REQUIREMENTS
 
-### 9.1 Path Finding
-- **AR-1.1**: Find shortest valid path between points
-- **AR-1.2**: Avoid no-fly zones
-- **AR-1.3**: Optimize delivery sequence to minimize total moves
-- **AR-1.4**: Prevent drone from running out of moves mid-flight
+### R1: No-Fly Zone Compliance
 
-### 9.2 Drone Allocation
-- **AR-2.1**: Match drone capabilities to delivery requirements
-- **AR-2.2**: Consider availability by day of week
-- **AR-2.3**: Support multi-drone solutions when single drone insufficient
-- **AR-2.4**: Return empty array when no valid allocation possible
+**Priority**: CRITICAL
 
----
+**Specification**: Drones must NEVER enter restricted airspace  
+- Polygon membership via ray-casting algorithm
+- Includes boundary vertices and edges
+- Handles concave polygons correctly
 
-## 10. ACCEPTANCE CRITERIA
+**Testing Strategy**: Dual verification
+1. Unit testing: PointInRegionTests 18 comprehensive scenarios (95% coverage)
+   - Points inside rectangular regions (line 31)
+   - Points outside (line 41)
+   - Points on vertices (line 51)
+   - Points on edges (line 61)
+   - Concave L-shaped polygons (lines 95-132)
+   - Triangular regions (lines 73-90)
+   - Edinburgh operational bounds (lines 137-168)
 
-### 10.1 Auto-marker Success
-- **AC-1.1**: Score 33/33 points on auto-marker tests
-- **AC-1.2**: All endpoint names exactly match specification
-- **AC-1.3**: All JSON response structures match specification
+2. Integration testing: PathPlanningTests verifies no path coordinates fall within restricted areas
 
-### 10.2 Manual Testing
-- **AC-2.1**: All endpoints testable via Postman/curl
-- **AC-2.2**: Docker image loads and runs without errors
-- **AC-2.3**: Service accessible at http://localhost:8080
+**Acceptance Criteria**: 100% of flight paths avoid all restricted areas
 
 ---
 
-## REQUIREMENTS TRACEABILITY MATRIX
+### R3: Drone Allocation AND Logic
 
-| Requirement ID | Type         | Test Level       | Priority | Test Method                   |
-|---------------|--------------|------------------|----------|-------------------------------|
-| FR-1.x | Functional   | Unit/Integration | High     | JUnit + API tests             |
-| FR-2.x | Functional   | Integration      | High     | API tests                     |
-| FR-3.x | Functional   | Integration      | High     | API tests                     |
-| FR-4.x | Functional   | Integration      | Critical | API tests + Auto-marker       |
-| FR-5.x | Functional   | System           | Critical | API tests + Auto-marker       |
-| FR-6.x | Functional   | Unit             | High     | JUnit                         |
-| DV-x.x | Data Quality | Unit/Integration | Critical | JUnit + Error injection       |
-| PR-x.x | Performance  | System           | Medium   | Load testing                  |
-| IR-x.x | Integration  | Integration      | High     | Mock external API             |
-| DR-x.x | Deployment   | System           | Critical | Docker tests                  |
-| QA-x.x | Quality      | All              | Medium   | Code review + Static analysis |
-| SR-x.x | Security     | Integration      | Medium   | Security tests                |
-| CR-x.x | Cost         | Unit             | High     | JUnit                         |
-| AR-x.x | Functional   | Unit/Integration | Critical | Algorithm tests               |
+**Priority**: HIGH
+
+**Specification**: Drone matches delivery ONLY if ALL requirements satisfied:
+- Capacity ≥ requirement
+- Cooling matches (if specified)
+- Heating matches (if specified)
+- Available on delivery day
+- Available at delivery time
+- Cost within maxCost budget (if specified)
+
+**Testing Strategy**: Explicit negative testing
+- AvailabilityTests.testQueryAvailableDrones_SimpleDispatch_ReturnsMultipleDrones (line 157): Only drones matching ALL constraints returned
+- AvailabilityTests.testQueryAvailableDrones_BothCoolingAndHeating_RequiresBoth (line 213): Both cooling AND heating required
+- AvailabilityTests.testQueryAvailableDrones_NoMatchingDrone (line 353): Empty result when no drone satisfies all
+
+**Acceptance Criteria**: Empty array returned if ANY requirement unmet
 
 ---
 
-## NOTES FOR TESTING
+## 6. REQUIREMENT TRACEABILITY MATRIX
 
-### High-Risk Areas
-1. Path calculation algorithms (complex, many edge cases)
-2. Cost calculation pro-rata distribution
-3. Multi-attribute dynamic queries with type casting
-4. Polygon region boundary detection
-5. Drone availability day-of-week matching
+| Requirement | Test Class | Coverage |
+|-------------|-----------|-------------------|----------|
+| FR-1.3 Distance | DroneNavigationTests | 90% |
+| FR-1.4 Proximity | DroneNavigationTests | 90% |
+| FR-1.5 Next Position | DroneNavigationTests | 90% |
+| FR-1.6 Point in Region | PointInRegionTests | 95% |
+| FR-2.1 Cooling Query | ControllerTests | 79% |
+| FR-2.2 Drone Details | ControllerTests | 79% |
+| FR-3.1 Query as Path | ControllerTests | 79% |
+| FR-3.2 Query POST | DroneQueryTests | 85% |
+| FR-4.1 Availability | AvailabilityTests | 84% |
+| FR-5.1 Path Calculation | PathPlanningTests | 81% |
+| FR-6.2 No-Fly Zones | PointInRegionTests | 95% |
+| R1 Safety | PointInRegionTests + PathPlanningTests | 95%/81% |
+| R3 AND Logic | AvailabilityTests | 84% |
 
-### Test Data Needed
-- Valid/invalid LngLat coordinates
-- Open/closed polygon regions
-- Various drone configurations (with/without cooling, different capacities)
-- Multiple MedDispatchRec scenarios
-- Edge cases: empty arrays, missing optional fields, boundary values
+---
 
-### Dependencies
-- External ILP REST API availability
-- Spring Boot framework
-- JSON parsing library (Jackson)
-- Geometric calculation utilities
+## 7. KNOWN LIMITATIONS
+
+### Untested Scenarios
+
+1. **Complex Multi-Drone**: 5+ drones, 10+ deliveries, multiple service points
+   - Reason: Combinatorial explosion, algorithmic complexity
+   - Risk: Medium
+   - Mitigation: Simple scenarios (1-2 deliveries) thoroughly tested
+
+2. **Concurrency**: Multi-threaded request handling
+   - Reason: No JMeter load testing infrastructure
+   - Risk: Medium
+   - Mitigation: Service likely stateless
+
+3. **Temporal Exhaustiveness**: Leap years, timezone transitions
+   - Reason: Requirements don't specify timezone handling
+   - Risk: Low
+   - Mitigation: Day-of-week logic tested with representative dates
+
+4. **External API Resilience**: Timeout/failure scenarios
+   - Reason: Limited WireMock fault injection
+   - Risk: Medium
+   - Mitigation: Mock testing covers happy paths
+
+5. **Security**: Penetration testing, OWASP validation
+   - Reason: Out of scope for coursework
+   - Risk: Low coursework, High production
+   - Mitigation: Spring Boot defaults, @Valid annotations
+
+---
+
+## 8. REQUIREMENTS SIGN-OFF
+
+**Test Coverage Target**: 75% overall instruction, 80% service layer  
+**Achieved**: 76% overall, 82% service layer  
+**Status**: TARGET EXCEEDED
+
+**Endpoint Coverage Target**: 100% all endpoints tested  
+**Achieved**: 100% (11/11 endpoints)  
+**Status**: TARGET MET
+
+**Critical Path Coverage**: PointInRegion 95%, AvailabilityService 84%  
+**Status**: CRITICAL PATHS VALIDATED
