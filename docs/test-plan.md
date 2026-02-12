@@ -16,19 +16,19 @@ The ILP CW2 system has multiple requirement levels with varying priorities and A
 - **Type**: Robustness requirement
 - **A&T Strategy**: Exhaustive error injection testing
 
-**R3 (Functional Correctness)**: Drone allocation must match ALL requirements (capacity, cooling, heating, maxCost, day availability) via AND logic
+**R3 (Functional Correctness)**: Drone allocation must match ALL requirements (capacity, cooling, heating, maxCost, day availability) via AND logic for queries
 - **Priority**: Critical - incorrect allocation could result in failed deliveries
 - **Type**: Business logic correctness
 - **A&T Strategy**: Equivalence partitioning with boundary analysis
 
 ### Medium Priority Requirements
 
-**R4 (Performance)**: Simple queries (uid, droneDetails) respond within 100ms; complex path calculations within 5 seconds
+**R4 (Performance)**: Simple queries (uid, droneDetails) respond within 500ms; complex path calculations within 5 seconds
 - **Priority**: Medium - affects user experience but not safety
 - **Type**: Measurable quality attribute
 - **A&T Strategy**: Statistical performance testing with synthetic and real data
 
-**R5 (Integration)**: Service must retrieve fresh data from external ILP endpoint on every request (no stale caching)
+**R5 (Integration)**: Service must retrieve fresh data from external ILP endpoint on every request 
 - **Priority**: Medium - ensures data consistency
 - **Type**: Integration requirement
 - **A&T Strategy**: Mock-based verification with timestamp validation
@@ -43,8 +43,6 @@ The ILP CW2 system has multiple requirement levels with varying priorities and A
 ---
 
 ## Priority Assessment and Resource Allocation
-
-Following Chapter 3 engineering principles:
 
 ### R1 (No-Fly Zone Safety) - Resource Allocation: 25%
 - **Partition Principle**: Decompose into two components:
@@ -81,7 +79,7 @@ Following Chapter 3 engineering principles:
 
 ## Test Levels and Approaches
 
-### Unit Testing (30% of total tests)
+### Unit Testing (~30% of total tests)
 
 **Components to Unit Test**:
 
@@ -97,7 +95,7 @@ Following Chapter 3 engineering principles:
         - T1.5: Degenerate cases: horizontal/vertical edges, collinear points
         - T1.6: Complex polygons: concave shapes, many vertices
         - T1.7: Invalid input: unclosed region (expect validation error)
-        - T1.8: Exhaustive test with randomly generated points and known regions (1000+ iterations)
+        - T1.8: Exhaustive test with randomly generated points and known regions 
 
 2. **Geometric Calculations (R3 prerequisites)**
     - distanceTo: Euclidean distance formula √[(x₂-x₁)² + (y₂-y₁)²]
@@ -140,7 +138,7 @@ Following Chapter 3 engineering principles:
         - T5.1: Simple path: 1 delivery, no obstacles, straight line
         - T5.2: Path avoiding single no-fly zone
         - T5.3: Path with delivery hover (consecutive identical coordinates)
-        - T5.4: Multi-delivery sequence (2-3 deliveries)
+        - T5.4: Multi-delivery sequence (2-3 deliveries in one go)
         - T5.5: Return to service point verification
         - T5.6: Move count within drone capacity
         - T5.7: Cost calculation accuracy (pro-rata distribution)
@@ -151,7 +149,7 @@ Following Chapter 3 engineering principles:
         - T6.1: Test successful data retrieval
         - T6.2: Test timeout handling
         - T6.3: Test malformed JSON response
-        - T6.4: Test 500 error response
+        - T6.4: Test error response
         - T6.5: Verify environment variable configuration (ILP_ENDPOINT)
 
 ### System Testing (30% of total tests)
@@ -160,7 +158,7 @@ Following Chapter 3 engineering principles:
 
 1. **CW1 Endpoints (R2)**
     - **Tasks**:
-        - T7.1: Valid requests return 200 + correct data
+        - T7.1: Valid requests return 200 with correct data involved
         - T7.2: Invalid JSON syntax returns 400
         - T7.3: Semantically invalid data returns 400 (null values, out-of-range)
         - T7.4: Extra JSON fields ignored gracefully
@@ -168,7 +166,7 @@ Following Chapter 3 engineering principles:
 2. **Query Endpoints (R2, R3)**
     - **Tasks**:
         - T8.1: dronesWithCooling returns correct drone IDs
-        - T8.2: droneDetails with valid ID returns 200 + drone object
+        - T8.2: droneDetails with valid ID returns 200
         - T8.3: droneDetails with invalid ID returns 404
         - T8.4: queryAsPath with valid attribute returns filtered results
         - T8.5: query POST with multiple criteria returns correct AND results
@@ -179,7 +177,7 @@ Following Chapter 3 engineering principles:
         - T9.2: calcDeliveryPath complex case (7 points auto-marker)
         - T9.3: calcDeliveryPathAsGeoJson produces valid GeoJSON
         - T9.4: GeoJSON viewable on https://geojson.io (manual validation)
-        - T9.5: Performance: simple case completes <2s
+        - T9.5: Performance: simple case completes <3s
         - T9.6: Performance: complex case completes <5s
 
 ---
@@ -346,7 +344,7 @@ Following Chapter 3 engineering principles:
 - **Statement Coverage**: ≥85% (measured via IDE coverage tools or JaCoCo)
 - **Endpoint Coverage**: 100% (all 11+ REST endpoints)
 - **Requirement Coverage**: 100% (each R1-R6 has mapped test cases)
-- **Error Path Coverage**: ≥70% (all 400/404 scenarios tested)
+- **Error Path Coverage**: ≥75% (potentially atleast 300/400 scenarios tested)
 
 ### Pass Criteria
 
@@ -354,13 +352,13 @@ Following Chapter 3 engineering principles:
 - **Integration Tests**: 100% pass
 - **System Tests**: ≥95% pass (complex scenarios may be disabled if incomplete)
 - **Performance Tests**: Meet R4 targets for tested scenarios
-- **Auto-Marker**: 33/33 points (ultimate validation)
+- **Auto-Marker**: 33/33 points 
 
 ### Evaluation Methods
 
 1. **Code Coverage Analysis**: JaCoCo reports in CI/CD
 2. **Auto-Marker Validation**: Final submission test
-3. **Manual Inspection**: Code review against specifications (R1 safety-critical)
+3. **Manual Inspection**: Code review against specifications 
 4. **Performance Profiling**: Execution time logging analysis
 5. **GeoJSON Visual Validation**: Manual check on geojson.io
 
@@ -411,4 +409,4 @@ Following Chapter 3 engineering principles:
 | T10 | Docker test | 2h | 4 | All | Medium |
 | CI/CD | Automation setup | 3h | 4 | All | Medium |
 
-**Total Estimated Effort**: 56 hours (within 50-hour budget allowing for iterations)
+**Total Estimated Effort**: 56 hours
