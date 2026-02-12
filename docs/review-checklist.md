@@ -1,49 +1,42 @@
 # Code Review Checklist - ILP CW2 Drone Delivery Service
 
-**Reviewer**: Self-Review (s2581854)  
-**Date**: 22 January 2026  
-**Review Scope**: Complete codebase (src/main/java/uk/ac/ed/acp/cw2/)  
-**Review Method**: Manual inspection + static analysis
-
----
-
 ## 1. Naming Conventions
 
-### Classes ✓
+### Classes 
 - [x] **PascalCase applied consistently**
     - Examples: `DroneNavigation`, `PathPlanningService`, `IlpClientService`
     - No violations found
 
-### Methods ✓
+### Methods 
 - [x] **camelCase applied consistently**
     - Examples: `calculateDistance()`, `isInRegion()`, `queryAvailableDrones()`
     - Descriptive action verbs used
     - No single-letter or cryptic names
 
-### Variables ✓
+### Variables
 - [x] **Meaningful, descriptive names**
     - Good: `availableDrones`, `flightPath`, `totalMoves`, `restrictedAreas`
     - Avoid: `d`, `temp`, `x` (except in mathematical contexts where appropriate)
     - Loop variables appropriately named: `drone`, `delivery`, `point`
 
-### Constants ⚠️
+### Constants 
 - [~] **UPPER_SNAKE_CASE where applicable**
     - Found: `STEP_SIZE = 0.00015` in DroneNavigation ✓
     - Issue: Some magic numbers not extracted to constants
     - Example: `16` (compass directions) could be `NUM_COMPASS_DIRECTIONS`
 
-**Rating**: 4/5 - Excellent overall, minor improvements possible
+**Rating**: 4/5 - Excellent overall and minor improvements are possible to be implemented.
 
 ---
 
 ## 2. Code Structure and Architecture
 
-### Separation of Concerns ✓
+### Separation of Concerns 
 - [x] **Controller layer** - REST endpoints only, no business logic
     - `CoreRestController`: CW1 endpoints
     - `QueryController`: Drone query endpoints
     - `DroneDeliveryController`: Path planning endpoints
-    - **Assessment**: Clean separation, controllers delegate to services
+    - **Assessment**: Clean separation and controllers delegate to services
 
 - [x] **Service layer** - Business logic isolated
     - `AvailabilityService`: Drone filtering logic
@@ -55,16 +48,15 @@
 - [x] **DTO layer** - Data transfer objects separate from domain
     - Request DTOs: `DistanceRequest`, `MedDispatchRec`, `QueryAttribute`
     - Response DTOs: `DeliveryPathResponse`, `DronePath`, `Delivery`
-    - **Assessment**: Clean API contract, no coupling to external models
+    - **Assessment**: Clean API contract abd no coupling to external models is happening
 
 - [x] **Model layer** - Domain objects for external data
     - `Drone`, `ServicePoint`, `Region`, `RestrictedArea`
     - **Assessment**: Appropriate for external API deserialization
 
-### Single Responsibility Principle ✓
-- [x] Each class has clear, focused purpose
-- [x] Methods do one thing well
-- [x] No "god classes" or bloated services
+### Single Responsibility Principle 
+- [x] Each class has clear and focused purpose
+- [x] Methods do one specific thing well
 
 ### Dependency Injection ✓
 - [x] `@Autowired` used appropriately for services
@@ -79,40 +71,55 @@
 
 ### High Priority Issues
 
-#### Issue #1: Cyclomatic Complexity in PathPlanningService
-**Location**: `PathPlanningService.java`, method `calculateOptimalRoute()` (lines ~89-156)  
+#### Issue #1: Cyclomatic Complexity in AvailabilityService
+**Location**: `AvailabilityService.java`, method `isDroneAvailable()` (lines 172-199)  
 **Severity**: Medium  
-**Description**: Nested loops for delivery sequencing result in complexity >15  
+**Description**: Nested loops for delivery sequencing result in complexity >130%
 **Code Snippet**:
     ```java
-for (Drone drone : availableDrones) {
-    for (MedDispatchRec delivery : dispatches) {
-        for (ServicePoint sp : servicePoints) {
-            // Complex allocation logic
-            ...
-        }
-    }
-}
+for (DroneForServicePoint dfsp : dronesForServicePoints) {
+            for (DroneForServicePoint.DroneAvailability da : dfsp.getDrones()) {
+                if (!da.getId().equals(droneId)) {
+                    continue;
+                }
+                ....
     ```
 **Impact**: Difficult to test all paths, harder to maintain  
-**Recommendation**: Extract delivery sequencing to separate method `findBestDeliverySequence()`  
+**Recommendation**: Extract getDrones() as a helper method 
 **Priority**: Medium (works correctly, but maintainability concern)
 
 #### Issue #2: Type Casting Strategy in QueryService
-**Location**: `QueryService.java`, method `evaluateCondition()` (lines ~67-102)  
+**Location**: `QueryService.java`, method `matchesSingleAttribute()` (lines 106-142)  
 **Severity**: Low  
 **Description**: Long if-else chain for type casting  
 **Code Snippet**:
     ```java
-if (value instanceof Integer) {
-    // compare as int
-} else if (value instanceof Double) {
-    // compare as double
-} else if (value instanceof Boolean) {
-    // compare as boolean
-} else if (value instanceof String) {
-    // compare as string
-}
+if (attrValue.isNumber()) {
+                return compareNumeric(attrValue.asDouble(), operator,
+                        Double.parseDouble(value));
+            } else if (attrValue.isBoolean()) {
+                boolean actualValue = attrValue.asBoolean();
+                boolean expectedValue = Boolean.parseBoolean(value);
+
+                // Handles both "=" and "!=" for boolean values
+                return switch (operator) {
+                    case "=" -> actualValue == expectedValue;
+                    case "!=" -> actualValue != expectedValue;
+                    default -> {
+                        logger.warn("Unsupported boolean operator: {}", operator);
+                        yield false;
+                    }
+                };
+            } else {
+                String actualText = attrValue.asText();
+                return switch (operator) {
+                    case "=" -> actualText.equals(value);
+                    case "!=" -> !actualText.equals(value);
+                    default -> {
+                        logger.warn("Unsupported string operator: {}", operator);
+                        yield false;
+                    }
+};
     ```
 **Impact**: Maintainability - adding new types requires modification  
 **Recommendation**: Use Strategy pattern or visitor pattern for type-specific operations  
@@ -132,25 +139,27 @@ if (value instanceof Integer) {
 **Priority**: Low (clear from context, but best practice)
 
 #### Issue #4: Potential Null Pointer in Optional Handling
-**Location**: `AvailabilityService.java`, lines ~45-52  
+**Location**: `AvailabilityService.java`, line 219 for example
 **Severity**: Medium  
-**Description**: Optional fields in `MedDispatchRec` accessed without null checks in some paths  
+**Description**: Optional fields in methods accessed without null checks in some paths  
 **Mitigation**: Currently works because validation happens earlier, but fragile  
 **Recommendation**: Add explicit `Objects.requireNonNull()` or Optional wrapping  
 **Priority**: Medium (defensive programming)
 
-### Positive Findings ✓
+### Positive Findings 
 
 #### Strength #1: Excellent Use of Java Streams
-**Location**: `QueryService.java`, `AvailabilityService.java`  
+**Location**: `QueryService.java` 
 **Example**:
     ```java
-    
-    return drones.stream()
-        .filter(drone -> drone.getCapacity() >= requiredCapacity)
-        .filter(drone -> matchesCoolingRequirement(drone, requirements))
-        .collect(Collectors.toList());
-    
+    ...
+    return allDrones.stream()
+                .filter(drone -> drone.getCapability() != null)
+                .filter(drone -> drone.getCapability().getCooling() != null)
+                .filter(drone -> drone.getCapability().getCooling() == hasCooling)
+                .map(Drone::getId)
+                .collect(Collectors.toList());
+    ... 
     ```
 **Assessment**: Clean, readable, functional style. No loops where streams more appropriate.
 
@@ -166,19 +175,19 @@ if (value instanceof Integer) {
 
 ## 4. Error Handling and Validation
 
-### Input Validation ✓
+### Input Validation 
 - [x] **Controller level validation**
     - `@Valid` annotations used on request bodies
     - Null checks for required fields
     - Type validation via Spring deserialization
 
-### HTTP Status Codes ✓
+### HTTP Status Codes 
 - [x] **200 OK**: Valid requests
 - [x] **400 Bad Request**: Invalid input (malformed JSON, null values)
 - [x] **404 Not Found**: Resource not found (droneDetails with invalid ID)
 - [x] **Consistent usage** across all endpoints
 
-### Exception Handling ⚠️
+### Exception Handling 
 - [~] **Global exception handler defined** but not fully exercised
     - `RestExceptionHandler` has methods for various exception types
     - Low test coverage (4%) indicates some handlers may be unused
@@ -196,17 +205,17 @@ if (value instanceof Integer) {
 
 ## 5. Performance and Efficiency
 
-### Algorithmic Efficiency ✓
+### Algorithmic Efficiency 
 - [x] **Point-in-polygon**: Ray-casting algorithm O(n) where n = vertices
 - [x] **Drone filtering**: Streams with short-circuit evaluation
 - [x] **Path planning**: Greedy nearest-neighbor (not optimal, but reasonable)
 
-### Potential Bottlenecks ⚠️
+### Potential Bottlenecks 
 - [~] **PathPlanningService**: Nested loops could be O(n³) for large inputs
     - Mitigation: Current drone/delivery counts are small (<20)
     - **Future**: Consider optimization if scaling required
 
-### Resource Management ✓
+### Resource Management 
 - [x] **No resource leaks**: RestTemplate managed by Spring
 - [x] **No unnecessary object creation** in hot paths
 - [~] **Potential improvement**: Cache external API results (currently fetches every request)
@@ -219,14 +228,14 @@ if (value instanceof Integer) {
 ## 6. Testing and Testability
 
 ### Test Coverage (from JaCoCo)
-- **Overall**: 76% ✓
-- **Services**: 82% ✓
-- **Controllers**: 79% ✓
-- **DTOs**: 89% ✓
-- **Models**: 66% ⚠️
-- **Exceptions**: 4% ❌
+- **Overall**: 76% 
+- **Services**: 82%
+- **Controllers**: 79% 
+- **DTOs**: 89% 
+- **Models**: 66% 
+- **Exceptions**: 4% 
 
-### Testability Features ✓
+### Testability Features 
 - [x] **Dependency injection** enables mocking
 - [x] **Pure functions** where possible (geometric calculations)
 - [x] **No static methods** (except utility classes)
@@ -244,17 +253,17 @@ if (value instanceof Integer) {
 
 ## 7. Security Considerations
 
-### Input Sanitization ✓
+### Input Sanitization 
 - [x] **Spring validation** prevents type confusion
 - [x] **No SQL injection risk** (no database)
 - [x] **JSON deserialization** uses safe Jackson configuration
 
-### Error Information Disclosure ⚠️
+### Error Information Disclosure 
 - [~] **Stack traces**: Currently not exposed (RestExceptionHandler prevents)
 - [~] **Error messages**: Generic enough (no internal paths revealed)
 - [x] **No sensitive data in logs**
 
-### Configuration Security ✓
+### Configuration Security 
 - [x] **Environment variables** for configuration (ILP_ENDPOINT)
 - [x] **No hardcoded credentials**
 
@@ -266,13 +275,13 @@ if (value instanceof Integer) {
 
 ### Code Comments
 - [~] **Javadoc**: Some classes have it, others don't
-    - Present: `PointInRegion` (algorithm explained)
+    - Present: `DayAvailability` (lines 8-11)
     - Missing: Most service methods
     - **Recommendation**: Add Javadoc for public API methods
 
-### Inline Comments ⚠️
-- [~] **Complex logic explained**: PointInRegion has good comments
-- [~] **Sparse elsewhere**: Could improve in PathPlanningService
+### Inline Comments 
+- [~] **Complex logic explained**: PathPlanningService has good comments especially in its most complex methods
+- [~] **Sparse elsewhere**: Could improve in QueryService and AvailabilityService
 - [x] **No commented-out code** ✓
 
 ### README and Documentation
@@ -286,13 +295,13 @@ if (value instanceof Integer) {
 
 ## 9. Code Consistency
 
-### Style Consistency ✓
+### Style Consistency 
 - [x] **Indentation**: 4 spaces (consistent)
-- [x] **Braces**: K&R style (consistent)
+- [x] **Braces**: Kernighan & Ritchie style i.e. indentation for '{}' in if-else blocks (consistent)
 - [x] **Line length**: Generally <120 characters
 - [x] **Import organization**: Proper grouping
 
-### Pattern Consistency ✓
+### Pattern Consistency 
 - [x] **Service methods** follow similar structure:
     1. Validate inputs
     2. Fetch external data
@@ -310,34 +319,34 @@ if (value instanceof Integer) {
 
 ## 10. Specific File Reviews
 
-### PointInRegion.java ✓
+### PointInRegion.java 
 **Rating**: 5/5
 - **Strengths**: Clear algorithm implementation, well-commented, comprehensive edge case handling
 - **Coverage**: 95%
 - **Issues**: None found
 
-### PathPlanningService.java ⚠️
-**Rating**: 3/5
+### PathPlanningService.java 
+**Rating**: 4/5
 - **Strengths**: Functional implementation, handles simple cases well
-- **Issues**: High complexity, incomplete multi-drone logic
+- **Issues**: High complexity
 - **Coverage**: 81%
-- **Recommendation**: Refactor nested loops, complete complex scenarios
+- **Recommendation**: Refactor nested loops
 
-### IlpClientService.java ⚠️
+### IlpClientService.java 
 **Rating**: 3/5
 - **Strengths**: Clean RestTemplate usage, configurable endpoint
 - **Issues**: No retry logic, timeout handling not tested
 - **Coverage**: Likely in 82% service average
 - **Recommendation**: Add circuit breaker pattern for resilience
 
-### QueryService.java ⚠️
+### QueryService.java 
 **Rating**: 4/5
 - **Strengths**: Dynamic query handling works well, good use of reflection
 - **Issues**: Type casting could use better pattern
 - **Coverage**: 85%
 - **Recommendation**: Consider strategy pattern for extensibility
 
-### CoreRestController.java ✓
+### CoreRestController.java 
 **Rating**: 5/5
 - **Strengths**: Clean delegation, proper validation, consistent error handling
 - **Coverage**: 91%
@@ -348,7 +357,7 @@ if (value instanceof Integer) {
 ## Summary of Review Findings
 
 ### Critical Issues (Must Fix)
-**None identified** ✓
+**None identified** 
 
 ### High Priority Issues (Should Fix)
 1. PathPlanningService complexity - refactor for maintainability
@@ -366,17 +375,17 @@ if (value instanceof Integer) {
 9. Add Swagger/OpenAPI documentation
 
 ### Strengths to Maintain
-- ✓ Excellent separation of concerns
-- ✓ Consistent naming conventions
-- ✓ Good use of Java streams
-- ✓ High test coverage in critical areas
-- ✓ Clean architectural layering
+- Excellent separation of concerns
+- Consistent naming conventions
+- Good use of Java streams
+- High test coverage in critical areas
+- Clean architectural layering
 
 ---
 
 ## Compliance with Assignment Requirements
 
-### CW2 Specification Compliance ✓
+### CW2 Specification Compliance 
 - [x] All endpoints start with `/api/v1/` (except actuator/health)
 - [x] Uses Java with Spring Boot
 - [x] Port 8080 for incoming requests
@@ -385,13 +394,11 @@ if (value instanceof Integer) {
 - [x] Docker image buildable
 - [x] Environment variable support (ILP_ENDPOINT)
 
-### Code Quality Standards (CW1 Marking Scheme)
-- [x] **Code quality & style (2 pts)**: Readable, clean, commented → Estimated 2/2
-- [x] **Good naming (1 pt)**: Meaningful names throughout → Estimated 1/1
-- [x] **Structure (4 pts)**: Excellent SoC, clear layers → Estimated 4/4
-- [x] **Testing/Mocking (3 pts)**: Comprehensive tests, good mocks → Estimated 3/3
-
-**Estimated CW1-style quality score**: 10/10
+### Code Quality Standards 
+- [x] **Code quality & style (2 pts)**: Readable, clean, commented
+- [x] **Good naming (1 pt)**: Meaningful names throughout 
+- [x] **Structure (4 pts)**: Excellent SoC, clear layers 
+- [x] **Testing/Mocking (3 pts)**: Comprehensive tests, good mocks 
 
 ---
 
@@ -404,7 +411,6 @@ if (value instanceof Integer) {
 - [ ] Run full test suite one final time
 
 ### Post-Submission (Future Work)
-- [ ] Refactor PathPlanningService.calculateOptimalRoute()
 - [ ] Add exception handler tests
 - [ ] Implement retry logic in IlpClientService
 - [ ] Add OpenAPI/Swagger documentation
